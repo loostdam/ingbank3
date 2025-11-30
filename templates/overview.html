@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monthly Overview - ING Bank Statement Manager</title>
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand">
+            <div class="logo">ING</div>
+            <span>Bank Statement Manager</span>
+        </div>
+        <div class="nav-links">
+            <a href="{{ url_for('index') }}">Transactions</a>
+            <a href="{{ url_for('overview') }}" class="active">Monthly Overview</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="card overview-card">
+            <div class="card-header">
+                <h2>Monthly Overview</h2>
+                <div class="year-selector">
+                    <label for="year">Year:</label>
+                    <select id="year" onchange="window.location.href='?year=' + this.value">
+                        {% for y in years %}
+                        <option value="{{ y }}" {% if y == year %}selected{% endif %}>{{ y }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div class="overview-table-container">
+                <table class="overview-table">
+                    <thead>
+                        <tr>
+                            <th class="sticky-col">Category</th>
+                            {% for month in months %}
+                            <th>{{ month }}</th>
+                            {% endfor %}
+                            <th class="total-col">Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for label, data in overview_data.items() %}
+                        {% if data.total != 0 %}
+                        <tr>
+                            <td class="sticky-col">
+                                <span class="label-badge-small" style="background-color: {{ data.color }}">
+                                    {{ label }}
+                                </span>
+                            </td>
+                            {% for i in range(1, 13) %}
+                            <td class="{% if data.months[i] < 0 %}negative{% elif data.months[i] > 0 %}positive{% endif %}">
+                                {% if data.months[i] != 0 %}
+                                € {{ "%.2f"|format(data.months[i]) }}
+                                {% else %}
+                                -
+                                {% endif %}
+                            </td>
+                            {% endfor %}
+                            <td class="total-col {% if data.total < 0 %}negative{% elif data.total > 0 %}positive{% endif %}">
+                                € {{ "%.2f"|format(data.total) }}
+                            </td>
+                        </tr>
+                        {% endif %}
+                        {% endfor %}
+                    </tbody>
+                    <tfoot>
+                        <tr class="totals-row">
+                            <td class="sticky-col"><strong>Monthly Total</strong></td>
+                            {% for i in range(1, 13) %}
+                            <td class="{% if monthly_totals[i] < 0 %}negative{% elif monthly_totals[i] > 0 %}positive{% endif %}">
+                                <strong>€ {{ "%.2f"|format(monthly_totals[i]) }}</strong>
+                            </td>
+                            {% endfor %}
+                            <td class="total-col {% if grand_total < 0 %}negative{% elif grand_total > 0 %}positive{% endif %}">
+                                <strong>€ {{ "%.2f"|format(grand_total) }}</strong>
+                            </td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+
+            <div class="summary-cards">
+                <div class="summary-card income">
+                    <h4>Total Income</h4>
+                    <p class="positive">
+                        € {{ "%.2f"|format(overview_data.values()|selectattr('total')|map(attribute='total')|select('gt', 0)|sum) }}
+                    </p>
+                </div>
+                <div class="summary-card expenses">
+                    <h4>Total Expenses</h4>
+                    <p class="negative">
+                        € {{ "%.2f"|format(overview_data.values()|selectattr('total')|map(attribute='total')|select('lt', 0)|sum) }}
+                    </p>
+                </div>
+                <div class="summary-card balance">
+                    <h4>Net Balance</h4>
+                    <p class="{% if grand_total >= 0 %}positive{% else %}negative{% endif %}">
+                        € {{ "%.2f"|format(grand_total) }}
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ING Bank Statement Manager</title>
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand">
+            <div class="logo">ING</div>
+            <span>Bank Statement Manager</span>
+        </div>
+        <div class="nav-links">
+            <a href="{{ url_for('index') }}" class="active">Transactions</a>
+            <a href="{{ url_for('overview') }}">Monthly Overview</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <div class="grid-layout">
+            <div class="sidebar">
+                <div class="card">
+                    <h3>Import Statements</h3>
+                    <form action="{{ url_for('upload') }}" method="post" enctype="multipart/form-data">
+                        <div class="file-upload">
+                            <input type="file" name="file" id="file" accept=".xlsx,.xls">
+                            <label for="file">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                    <polyline points="17 8 12 3 7 8"/>
+                                    <line x1="12" y1="3" x2="12" y2="15"/>
+                                </svg>
+                                <span>Choose Excel File</span>
+                            </label>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Import</button>
+                    </form>
+                </div>
+
+                <div class="card">
+                    <h3>Labels</h3>
+                    <form action="{{ url_for('add_label') }}" method="post" class="label-form">
+                        <input type="text" name="label_name" placeholder="New label name" required>
+                        <input type="color" name="label_color" value="#3b82f6" class="color-picker">
+                        <button type="submit" class="btn btn-secondary">Add</button>
+                    </form>
+                    <div class="labels-list">
+                        {% for label in labels %}
+                        <div class="label-item">
+                            <span class="label-badge" style="background-color: {{ label.color }}">
+                                {{ label.name }}
+                            </span>
+                            <form action="{{ url_for('delete_label', label_name=label.name) }}" method="post" style="display:inline;">
+                                <button type="submit" class="btn-delete" title="Delete label">×</button>
+                            </form>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3>Bulk Actions</h3>
+                    <select id="bulk-label-select" class="select-input">
+                        <option value="">Select label...</option>
+                        {% for label in labels %}
+                        <option value="{{ label.name }}">{{ label.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <button onclick="bulkAssign()" class="btn btn-secondary">Apply to Selected</button>
+                    <button onclick="selectAll()" class="btn btn-ghost">Select All</button>
+                    <button onclick="deselectAll()" class="btn btn-ghost">Deselect All</button>
+                </div>
+
+                <div class="card">
+                    <h3>Data Management</h3>
+                    <form action="{{ url_for('clear_data') }}" method="post" onsubmit="return confirm('Are you sure you want to clear all transactions?');">
+                        <button type="submit" class="btn btn-danger">Clear All Data</button>
+                    </form>
+                </div>
+            </div>
+
+            <div class="main-content">
+                <div class="card">
+                    <div class="card-header">
+                        <h2>Transactions</h2>
+                        <span class="badge">{{ transactions|length }} transactions</span>
+                    </div>
+                    
+                    <div class="filters">
+                        <input type="text" id="search" placeholder="Search transactions..." class="search-input">
+                        <select id="filter-label" class="select-input">
+                            <option value="">All labels</option>
+                            <option value="unlabeled">Unlabeled</option>
+                            {% for label in labels %}
+                            <option value="{{ label.name }}">{{ label.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <select id="filter-type" class="select-input">
+                            <option value="">All types</option>
+                            <option value="Debit">Expenses</option>
+                            <option value="Credit">Income</option>
+                        </select>
+                    </div>
+
+                    <div class="table-container">
+                        <table class="transactions-table">
+                            <thead>
+                                <tr>
+                                    <th><input type="checkbox" id="select-all-checkbox"></th>
+                                    <th>Date</th>
+                                    <th>Description</th>
+                                    <th>Counterparty</th>
+                                    <th>Amount</th>
+                                    <th>Label</th>
+                                </tr>
+                            </thead>
+                            <tbody id="transactions-body">
+                                {% for t in transactions %}
+                                <tr class="transaction-row" 
+                                    data-id="{{ t.id }}" 
+                                    data-description="{{ t.description|lower }}"
+                                    data-counterparty="{{ t.counterparty|lower }}"
+                                    data-label="{{ t.label|lower }}"
+                                    data-type="{{ t.type }}">
+                                    <td><input type="checkbox" class="row-checkbox" value="{{ t.id }}"></td>
+                                    <td class="date">{{ t.date }}</td>
+                                    <td class="description">
+                                        <div class="desc-text">{{ t.description }}</div>
+                                        {% if t.counterparty %}
+                                        <div class="counterparty-small">{{ t.counterparty }}</div>
+                                        {% endif %}
+                                    </td>
+                                    <td class="counterparty">{{ t.counterparty }}</td>
+                                    <td class="amount {% if t.amount < 0 %}negative{% else %}positive{% endif %}">
+                                        € {{ "%.2f"|format(t.amount) }}
+                                    </td>
+                                    <td class="label-cell">
+                                        <select class="label-select" onchange="assignLabel('{{ t.id }}', this.value)"
+                                            {% for l in labels %}
+                                            {% if l.name == t.label %}
+                                            style="background-color: {{ l.color }}; color: white;"
+                                            {% endif %}
+                                            {% endfor %}
+                                        >
+                                            <option value="">No label</option>
+                                            {% for label in labels %}
+                                            <option value="{{ label.name }}" 
+                                                {% if label.name == t.label %}selected{% endif %}
+                                                data-color="{{ label.color }}">
+                                                {{ label.name }}
+                                            </option>
+                                            {% endfor %}
+                                        </select>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function assignLabel(transactionId, label) {
+            const formData = new FormData();
+            formData.append('transaction_id', transactionId);
+            formData.append('label', label);
+            
+            fetch('/assign_label', {
+                method: 'POST',
+                body: formData
+            }).then(response => response.json())
+              .then(data => {
+                  if (data.success) {
+                      const select = document.querySelector(`tr[data-id="${transactionId}"] .label-select`);
+                      const selectedOption = select.options[select.selectedIndex];
+                      if (selectedOption && selectedOption.dataset.color) {
+                          select.style.backgroundColor = selectedOption.dataset.color;
+                          select.style.color = 'white';
+                      } else {
+                          select.style.backgroundColor = '';
+                          select.style.color = '';
+                      }
+                      const row = document.querySelector(`tr[data-id="${transactionId}"]`);
+                      row.dataset.label = label.toLowerCase();
+                  }
+              });
+        }
+
+        function bulkAssign() {
+            const label = document.getElementById('bulk-label-select').value;
+            const checkboxes = document.querySelectorAll('.row-checkbox:checked');
+            const ids = Array.from(checkboxes).map(cb => cb.value);
+            
+            if (ids.length === 0) {
+                alert('Please select transactions first');
+                return;
+            }
+            
+            fetch('/bulk_assign', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({transaction_ids: ids, label: label})
+            }).then(response => response.json())
+              .then(data => {
+                  if (data.success) {
+                      location.reload();
+                  }
+              });
+        }
+
+        function selectAll() {
+            document.querySelectorAll('.row-checkbox').forEach(cb => {
+                if (cb.closest('tr').style.display !== 'none') {
+                    cb.checked = true;
+                }
+            });
+        }
+
+        function deselectAll() {
+            document.querySelectorAll('.row-checkbox').forEach(cb => cb.checked = false);
+        }
+
+        document.getElementById('select-all-checkbox').addEventListener('change', function() {
+            document.querySelectorAll('.row-checkbox').forEach(cb => {
+                if (cb.closest('tr').style.display !== 'none') {
+                    cb.checked = this.checked;
+                }
+            });
+        });
+
+        function filterTransactions() {
+            const search = document.getElementById('search').value.toLowerCase();
+            const labelFilter = document.getElementById('filter-label').value.toLowerCase();
+            const typeFilter = document.getElementById('filter-type').value;
+            
+            document.querySelectorAll('.transaction-row').forEach(row => {
+                const desc = row.dataset.description;
+                const counterparty = row.dataset.counterparty;
+                const label = row.dataset.label;
+                const type = row.dataset.type;
+                
+                let show = true;
+                
+                if (search && !desc.includes(search) && !counterparty.includes(search)) {
+                    show = false;
+                }
+                
+                if (labelFilter === 'unlabeled' && label !== '') {
+                    show = false;
+                } else if (labelFilter && labelFilter !== 'unlabeled' && label !== labelFilter) {
+                    show = false;
+                }
+                
+                if (typeFilter && type !== typeFilter) {
+                    show = false;
+                }
+                
+                row.style.display = show ? '' : 'none';
+            });
+        }
+
+        document.getElementById('search').addEventListener('input', filterTransactions);
+        document.getElementById('filter-label').addEventListener('change', filterTransactions);
+        document.getElementById('filter-type').addEventListener('change', filterTransactions);
+    </script>
+</body>
+</html>
